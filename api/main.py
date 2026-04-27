@@ -37,7 +37,7 @@ async def handle_messages(request: Request):
                     try:
                         # USAR NOMBRE EXACTO PARA EVITAR 404
                         response = client.models.generate_content(
-                            model='gemini-3.1-flash-preview',
+                            model='gemini-3.1-flash-lite-preview',
                             contents=prompt
                         )
                         await send_message(sender_id, response.text)
