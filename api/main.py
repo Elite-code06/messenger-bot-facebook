@@ -10,17 +10,17 @@ FB_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSp_Xfqad--tk24fQ9RbvCK2vb-fW6LdLPj7eiV48XjCOGcT0qGV16sWbTdNsJ8r99D0gj6oeOasa7d/pub?output=csv"
 
-# Inicialización del nuevo cliente para evitar el Warning
+# Cliente oficial de la nueva librería
 client = genai.Client(api_key=GEMINI_KEY)
 
 async def obtener_inventario():
-    async with httpx.AsyncClient() as client_http:
+    async with httpx.AsyncClient(follow_redirects=True) as client_http:
         try:
             res = await client_http.get(CSV_URL)
             return res.text
         except Exception as e:
-            print(f"Error al obtener inventario: {e}")
-            return "No hay datos de inventario disponibles."
+            print(f"Error inventario: {e}")
+            return "Inventario no disponible."
 
 @app.post("/")
 async def handle_messages(request: Request):
@@ -35,28 +35,22 @@ async def handle_messages(request: Request):
                     inventario = await obtener_inventario()
                     
                     prompt = f"""
-                    Eres un vendedor experto de 'Elite Store Pasto'. 
-                    Inventario actual:
-                    {inventario}
-                    
-                    Reglas:
-                    1. Responde breve y amable en español de Colombia.
-                    2. Da precios exactos del inventario.
-                    3. Ubicación: Pasto, Nariño.
-                    
-                    Mensaje del cliente: {user_msg}
+                    Eres el vendedor de 'Elite Store Pasto'. 
+                    Inventario: {inventario}
+                    Reglas: Breve, muy amable, español de Pasto/Colombia. 
+                    Ubicación: Pasto, Nariño.
+                    Pregunta: {user_msg}
                     """
                     
                     try:
-                        # Usando Gemini gemini-3.1-flash-lite-preview
+                        # Usando el modelo Lite para evitar bloqueos
                         response = client.models.generate_content(
                             model='gemini-3.1-flash-lite-preview',
                             contents=prompt
                         )
                         await send_message(sender_id, response.text)
                     except Exception as e:
-                        # Si sale el error 429, esto lo imprimirá en los logs
-                        print(f"Error con Gemini (posible límite de cuota): {e}")
+                        print(f"Error Gemini: {e}")
                         
     return Response(content="EVENT_RECEIVED", status_code=200)
 
