@@ -5,12 +5,12 @@ from fastapi import FastAPI, Request, Response
 
 app = FastAPI()
 
-# Configuración Elite Store Pasto
+# Configuración
 FB_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSp_Xfqad--tk24fQ9RbvCK2vb-fW6LdLPj7eiV48XjCOGcT0qGV16sWbTdNsJ8r99D0gj6oeOasa7d/pub?output=csv"
 
-# Cliente con la nueva librería oficial
+# Cliente con la nueva librería
 client = genai.Client(api_key=GEMINI_KEY)
 
 async def obtener_inventario():
@@ -19,7 +19,7 @@ async def obtener_inventario():
             res = await client_http.get(CSV_URL)
             return res.text
         except:
-            return "Inventario no disponible actualmente."
+            return "Inventario no disponible."
 
 @app.post("/")
 async def handle_messages(request: Request):
@@ -32,19 +32,12 @@ async def handle_messages(request: Request):
                     user_msg = event["message"].get("text")
                     
                     inventario = await obtener_inventario()
-                    
-                    prompt = f"""
-                    Eres el vendedor de 'Elite Store Pasto'. 
-                    Inventario: {inventario}
-                    Responde de forma muy breve, amable y en español de Colombia (Pasto).
-                    Ubicación: Pasto, Nariño.
-                    Cliente pregunta: {user_msg}
-                    """
+                    prompt = f"Eres un vendedor. Inventario: {inventario}. Responde breve a: {user_msg}"
                     
                     try:
-                        # Usamos 3.1 Flash (No Lite) para mayor estabilidad
+                        # USAR NOMBRE EXACTO PARA EVITAR 404
                         response = client.models.generate_content(
-                            model='gemini-3.1-flash',
+                            model='gemini-3.1-flash-preview',
                             contents=prompt
                         )
                         await send_message(sender_id, response.text)
