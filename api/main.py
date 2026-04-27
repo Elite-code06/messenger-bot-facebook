@@ -1,17 +1,16 @@
 import os
 import httpx
-# 1. Importación correcta de la nueva librería
 from google import genai
 from fastapi import FastAPI, Request, Response
 
 app = FastAPI()
 
-# Configuración desde variables de entorno
+# Configuración
 FB_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSp_Xfqad--tk24fQ9RbvCK2vb-fW6LdLPj7eiV48XjCOGcT0qGV16sWbTdNsJ8r99D0gj6oeOasa7d/pub?output=csv"
 
-# 2. Inicialización del nuevo cliente
+# Inicialización del nuevo cliente para evitar el Warning
 client = genai.Client(api_key=GEMINI_KEY)
 
 async def obtener_inventario():
@@ -33,34 +32,31 @@ async def handle_messages(request: Request):
                     sender_id = event["sender"]["id"]
                     user_msg = event["message"].get("text")
                     
-                    # Descargamos el inventario actual
                     inventario = await obtener_inventario()
                     
-                    # Prompt optimizado para Gemini 2.0 Flash
                     prompt = f"""
                     Eres un vendedor experto de 'Elite Store Pasto'. 
-                    Tu objetivo es ayudar a los clientes usando este inventario:
+                    Inventario actual:
                     {inventario}
                     
-                    Reglas de oro:
-                    1. Responde de forma muy breve, amable y en español de Colombia.
-                    2. Si preguntan precio o info, dalo exactamente como aparece en el inventario.
-                    3. Nuestra ubicación física es en Pasto, Nariño.
-                    4. Si un producto NO está en el inventario, di que no lo tenemos por ahora.
-                    5. No inventes datos que no estén en el texto del inventario.
+                    Reglas:
+                    1. Responde breve y amable en español de Colombia.
+                    2. Da precios exactos del inventario.
+                    3. Ubicación: Pasto, Nariño.
                     
                     Mensaje del cliente: {user_msg}
                     """
                     
                     try:
-                        # 3. Llamada a Gemini 2.0 Flash usando el nuevo cliente
+                        # Usando Gemini gemini-3.1-flash-lite-preview
                         response = client.models.generate_content(
-                            model='gemini-2.0-flash',
+                            model='gemini-3.1-flash-lite-preview',
                             contents=prompt
                         )
                         await send_message(sender_id, response.text)
                     except Exception as e:
-                        print(f"Error con Gemini: {e}")
+                        # Si sale el error 429, esto lo imprimirá en los logs
+                        print(f"Error con Gemini (posible límite de cuota): {e}")
                         
     return Response(content="EVENT_RECEIVED", status_code=200)
 
@@ -76,4 +72,4 @@ async def verify(request: Request):
     challenge = request.query_params.get("hub.challenge")
     if token == os.getenv("VERIFY_TOKEN"):
         return Response(content=challenge)
-    return Response(content="Error de verificación", status_code=403)
+    return Response(content="Error", status_code=403)
