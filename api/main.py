@@ -1,44 +1,76 @@
 import os
 import httpx
+import google.generativeai as genai
 from fastapi import FastAPI, Request, Response
 
 app = FastAPI()
 
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
-PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
+# Configuración desde variables de entorno
+FB_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+# Tu enlace de Google Sheets (formato CSV)
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSp_Xfqad--tk24fQ9RbvCK2vb-fW6LdLPj7eiV48XjCOGcT0qGV16sWbTdNsJ8r99D0gj6oeOasa7d/pub?output=csv"
 
-@app.get("/")
-async def verify(request: Request):
-    params = request.query_params
-    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == VERIFY_TOKEN:
-        return Response(content=params.get("hub.challenge"), status_code=200)
-    return Response(content="Token inválido", status_code=403)
+genai.configure(api_key=GEMINI_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+async def obtener_inventario():
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(CSV_URL)
+            return res.text
+        except Exception as e:
+            print(f"Error al obtener inventario: {e}")
+            return "No hay datos de inventario disponibles."
 
 @app.post("/")
 async def handle_messages(request: Request):
     data = await request.json()
-    print(f"--- NUEVO EVENTO RECIBIDO ---")
-    
     if data.get("object") == "page":
         for entry in data.get("entry"):
-            for messaging_event in entry.get("messaging"):
-                if messaging_event.get("message"):
-                    sender_id = messaging_event["sender"]["id"]
-                    message_text = messaging_event["message"].get("text")
-                    print(f"Mensaje de {sender_id}: {message_text}")
+            for event in entry.get("messaging"):
+                if event.get("message"):
+                    sender_id = event["sender"]["id"]
+                    user_msg = event["message"].get("text")
                     
-                    # Intentamos responder
-                    print("Intentando enviar respuesta...")
-                    await send_message(sender_id, f"¡Hola! Soy tu bot de ventas. Recibí tu mensaje: {message_text}")
-    
+                    # Descargamos el inventario actual
+                    inventario = await obtener_inventario()
+                    
+                    # Configuramos a Gemini como tu vendedor en Pasto
+                    prompt = f"""
+                    Eres un vendedor experto de 'Elite Store Pasto'. 
+                    Tu objetivo es ayudar a los clientes usando este inventario:
+                    {inventario}
+                    
+                    Reglas de oro:
+                    1. Responde de forma muy breve, amable y en español de Colombia.
+                    2. Si preguntan precio o info, dalo exactamente como aparece en el inventario.
+                    3. Nuestra ubicación física es en Pasto, Nariño.
+                    4. Si un producto NO está en el inventario, di que no lo tenemos por ahora.
+                    5. No inventes datos que no estén en el texto del inventario.
+                    
+                    Mensaje del cliente: {user_msg}
+                    """
+                    
+                    try:
+                        response = model.generate_content(prompt)
+                        await send_message(sender_id, response.text)
+                    except Exception as e:
+                        print(f"Error con Gemini: {e}")
+                        
     return Response(content="EVENT_RECEIVED", status_code=200)
 
 async def send_message(recipient_id, text):
-    url = f"https://graph.facebook.com/v19.0/me/messages?access_token={PAGE_ACCESS_TOKEN}"
-    payload = {
-        "recipient": {"id": recipient_id},
-        "message": {"text": text}
-    }
+    url = f"https://graph.facebook.com/v19.0/me/messages?access_token={FB_TOKEN}"
+    payload = {"recipient": {"id": recipient_id}, "message": {"text": text}}
     async with httpx.AsyncClient() as client:
-        response = await client.post(url, json=payload)
-        print(f"RESULTADO ENVÍO: {response.status_code} - {response.text}")
+        await client.post(url, json=payload)
+
+@app.get("/")
+async def verify(request: Request):
+    # Esto es solo para la verificación inicial de Facebook
+    token = request.query_params.get("hub.verify_token")
+    challenge = request.query_params.get("hub.challenge")
+    if token == os.getenv("VERIFY_TOKEN"):
+        return Response(content=challenge)
+    return Response(content="Error de verificación", status_code=403)
