@@ -5,12 +5,12 @@ from fastapi import FastAPI, Request, Response
 
 app = FastAPI()
 
-# Configuración
+# Configuración Elite Store Pasto
 FB_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSp_Xfqad--tk24fQ9RbvCK2vb-fW6LdLPj7eiV48XjCOGcT0qGV16sWbTdNsJ8r99D0gj6oeOasa7d/pub?output=csv"
 
-# Cliente oficial de la nueva librería
+# Cliente con la nueva librería oficial
 client = genai.Client(api_key=GEMINI_KEY)
 
 async def obtener_inventario():
@@ -18,9 +18,8 @@ async def obtener_inventario():
         try:
             res = await client_http.get(CSV_URL)
             return res.text
-        except Exception as e:
-            print(f"Error inventario: {e}")
-            return "Inventario no disponible."
+        except:
+            return "Inventario no disponible actualmente."
 
 @app.post("/")
 async def handle_messages(request: Request):
@@ -37,20 +36,20 @@ async def handle_messages(request: Request):
                     prompt = f"""
                     Eres el vendedor de 'Elite Store Pasto'. 
                     Inventario: {inventario}
-                    Reglas: Breve, muy amable, español de Pasto/Colombia. 
+                    Responde de forma muy breve, amable y en español de Colombia (Pasto).
                     Ubicación: Pasto, Nariño.
-                    Pregunta: {user_msg}
+                    Cliente pregunta: {user_msg}
                     """
                     
                     try:
-                        # Usando el modelo Lite para evitar bloqueos
+                        # Usamos 3.1 Flash (No Lite) para mayor estabilidad
                         response = client.models.generate_content(
-                            model='gemini-3.1-flash-lite-preview',
+                            model='gemini-3.1-flash',
                             contents=prompt
                         )
                         await send_message(sender_id, response.text)
                     except Exception as e:
-                        print(f"Error Gemini: {e}")
+                        print(f"Error en Gemini: {e}")
                         
     return Response(content="EVENT_RECEIVED", status_code=200)
 
