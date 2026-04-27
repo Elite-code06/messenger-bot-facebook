@@ -1,6 +1,7 @@
 import os
 import httpx
-import google.generativeai as genai
+# 1. Importación correcta de la nueva librería
+from google import genai
 from fastapi import FastAPI, Request, Response
 
 app = FastAPI()
@@ -8,16 +9,15 @@ app = FastAPI()
 # Configuración desde variables de entorno
 FB_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-# Tu enlace de Google Sheets (formato CSV)
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSp_Xfqad--tk24fQ9RbvCK2vb-fW6LdLPj7eiV48XjCOGcT0qGV16sWbTdNsJ8r99D0gj6oeOasa7d/pub?output=csv"
 
-genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+# 2. Inicialización del nuevo cliente
+client = genai.Client(api_key=GEMINI_KEY)
 
 async def obtener_inventario():
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() as client_http:
         try:
-            res = await client.get(CSV_URL)
+            res = await client_http.get(CSV_URL)
             return res.text
         except Exception as e:
             print(f"Error al obtener inventario: {e}")
@@ -36,7 +36,7 @@ async def handle_messages(request: Request):
                     # Descargamos el inventario actual
                     inventario = await obtener_inventario()
                     
-                    # Configuramos a Gemini como tu vendedor en Pasto
+                    # Prompt optimizado para Gemini 2.0 Flash
                     prompt = f"""
                     Eres un vendedor experto de 'Elite Store Pasto'. 
                     Tu objetivo es ayudar a los clientes usando este inventario:
@@ -53,7 +53,11 @@ async def handle_messages(request: Request):
                     """
                     
                     try:
-                        response = model.generate_content(prompt)
+                        # 3. Llamada a Gemini 2.0 Flash usando el nuevo cliente
+                        response = client.models.generate_content(
+                            model='gemini-2.0-flash',
+                            contents=prompt
+                        )
                         await send_message(sender_id, response.text)
                     except Exception as e:
                         print(f"Error con Gemini: {e}")
@@ -63,12 +67,11 @@ async def handle_messages(request: Request):
 async def send_message(recipient_id, text):
     url = f"https://graph.facebook.com/v19.0/me/messages?access_token={FB_TOKEN}"
     payload = {"recipient": {"id": recipient_id}, "message": {"text": text}}
-    async with httpx.AsyncClient() as client:
-        await client.post(url, json=payload)
+    async with httpx.AsyncClient() as client_http:
+        await client_http.post(url, json=payload)
 
 @app.get("/")
 async def verify(request: Request):
-    # Esto es solo para la verificación inicial de Facebook
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
     if token == os.getenv("VERIFY_TOKEN"):
